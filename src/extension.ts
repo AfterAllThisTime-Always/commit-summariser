@@ -125,6 +125,185 @@
 // export function deactivate() {}
 
 
+
+
+
+// import * as vscode from "vscode";
+// import { exec } from "child_process";
+// import util from "util";
+
+// const execPromise = util.promisify(exec);
+
+// export async function activate(context: vscode.ExtensionContext) {
+//   vscode.window.showInformationMessage('✅ Commit Summariser activated!');
+//   console.log('✅ Commit Summariser activated');
+//   const output = vscode.window.createOutputChannel("Commit Summariser");
+//   output.appendLine("✅ Commit Summariser activated");
+//   output.show(true); 
+
+//   // -----------------------------------
+//   // 1️⃣ Register your Summarize Commit command
+//   // -----------------------------------
+//   const disposable = vscode.commands.registerCommand(
+//     "commit-summariser.summariseCommit",
+//     async (args?: { commitHash?: string }) => {
+//       const workspace = vscode.workspace.workspaceFolders?.[0];
+//       if (!workspace) {
+//         vscode.window.showErrorMessage("No workspace open. Please open a Git project first.");
+//         return;
+//       }
+
+//       const cwd = workspace.uri.fsPath;
+//       let commitHash = args?.commitHash;
+
+//       try {
+//         // Confirm repo
+//         await execPromise("git rev-parse --is-inside-work-tree", { cwd });
+
+//         // If no hash provided (manual trigger), show picker
+//         if (!commitHash) {
+//           const commits = await getRecentCommits(cwd);
+//           const pick = await vscode.window.showQuickPick(
+//             commits.map((c) => ({
+//               label: `${c.hash} — ${c.message}`,
+//               hash: c.hash,
+//             })),
+//             { placeHolder: "Select a commit to summarise" }
+//           );
+//           if (!pick) return;
+//           commitHash = pick.hash;
+//         }
+
+//         const { stdout: commitDetails } = await execPromise(
+//           `git show ${commitHash} --stat --pretty=medium`,
+//           { cwd }
+//         );
+
+//         vscode.window.withProgress(
+//           { location: vscode.ProgressLocation.Notification, title: `Summarising commit ${commitHash}…` },
+//           async () => {
+//             const summary = await getAISummary(commitDetails);
+//             const doc = await vscode.workspace.openTextDocument({
+//               content: summary,
+//               language: "markdown",
+//             });
+//             vscode.window.showTextDocument(doc, { preview: false });
+//           }
+//         );
+//       } catch (err: any) {
+//         vscode.window.showErrorMessage(`Error summarising commit: ${err.message}`);
+//       }
+//     }
+//   );
+
+//   context.subscriptions.push(disposable);
+
+//   // -----------------------------------
+//   // 2️⃣ 🔗 THIS IS THE GIT GRAPH INTEGRATION PART
+//   // -----------------------------------
+//   try {
+//   output.appendLine("🔍 Checking for Git Graph extension...");
+//   const gitGraphExt = vscode.extensions.getExtension("mhutchie.git-graph");
+
+//   if (gitGraphExt && gitGraphExt.packageJSON && gitGraphExt.packageJSON.isBuiltin !== false) {
+//     output.appendLine("✅ Git Graph metadata found.");
+//   } else {
+//     output.appendLine("❌ Git Graph not truly installed (ghost reference).");
+//   }
+//   output.appendLine(gitGraphExt ? "✅ Git Graph extension found." : "❌ Git Graph extension NOT found.");
+
+//   if (gitGraphExt) {
+//     if (!gitGraphExt.isActive) {
+//       output.appendLine("🔄 Activating Git Graph...");
+//       await gitGraphExt.activate();
+//       output.appendLine("✅ Git Graph activated.");
+//     } else {
+//       output.appendLine("✅ Git Graph already active.");
+//     }
+
+//     output.appendLine(JSON.stringify({
+//     id: gitGraphExt?.id,
+//     isActive: gitGraphExt?.isActive,
+//     version: gitGraphExt?.packageJSON?.version,
+//     hasExports: !!gitGraphExt?.exports
+//   }, null, 2));
+
+//     let gitGraphApi = gitGraphExt.exports;
+
+//     if (!gitGraphApi) {
+//       output.appendLine("⚠️ Git Graph API undefined after activation. Retrying...");
+//       // Wait a moment, then try again
+//       await new Promise((res) => setTimeout(res, 1000));
+//       gitGraphApi = gitGraphExt.exports;
+//     }
+
+
+//     if (gitGraphApi) {
+//       const keys = Object.keys(gitGraphApi);
+//       output.appendLine(`🔍 Git Graph API keys: ${keys.join(", ")}`);
+
+//       if (gitGraphApi.registerGlobalExternalAction) {
+//         output.appendLine("⚙️ Registering 'Summarize Commit' action...");
+//         gitGraphApi.registerGlobalExternalAction(
+//           "Summarize Commit",
+//           async (data: { commitHash: string }) => {
+//             output.appendLine(`🧩 Summarising from Git Graph: ${data.commitHash}`);
+//             vscode.commands.executeCommand("commit-summariser.summariseCommit", {
+//               commitHash: data.commitHash,
+//             });
+//           }
+//         );
+//         vscode.window.showInformationMessage("✅ Commit Summariser registered with Git Graph");
+//         output.appendLine("✅ Commit Summariser registered successfully with Git Graph.");
+//       } else {
+//         vscode.window.showWarningMessage("⚠️ Git Graph API missing 'registerGlobalExternalAction'. Update Git Graph to ≥ v1.30.0.");
+//         output.appendLine("⚠️ Git Graph API missing 'registerGlobalExternalAction'.");
+//       }
+//     } else {
+//       vscode.window.showWarningMessage("⚠️ Git Graph API exports are undefined.");
+//       output.appendLine("⚠️ Git Graph API exports undefined.");
+//     }
+//   } else {
+//     vscode.window.showWarningMessage("❌ Git Graph not installed in this window.");
+//     output.appendLine("❌ Git Graph extension not found in this environment.");
+//   }
+// } catch (err: any) {
+//   const message = `❌ Error integrating with Git Graph: ${err.message}`;
+//   vscode.window.showErrorMessage(message);
+//   output.appendLine(message);
+// }
+//   // -----------------------------------
+//   // End of Git Graph integration part
+//   // -----------------------------------
+// }
+
+// async function getRecentCommits(cwd: string) {
+//   const { stdout } = await execPromise(`git log --pretty=format:"%h|%s" -n 20`, { cwd });
+//   return stdout
+//     .trim()
+//     .split("\n")
+//     .filter(Boolean)
+//     .map((line) => {
+//       const [hash, message] = line.split("|");
+//       return { hash, message };
+//     });
+// }
+
+// async function getAISummary(commitText: string): Promise<string> {
+//   try {
+//     const { stdout } = await execPromise(`gh copilot explain "${commitText.replace(/"/g, '\\"')}"`);
+//     return stdout || "No summary returned.";
+//   } catch (err: any) {
+//     return `⚠️ Error generating summary: ${err.message}`;
+//   }
+// }
+
+// export function deactivate() {}
+
+
+
+
+
 import * as vscode from "vscode";
 import { exec } from "child_process";
 import util from "util";
@@ -132,17 +311,20 @@ import util from "util";
 const execPromise = util.promisify(exec);
 
 export async function activate(context: vscode.ExtensionContext) {
-  console.log("✅ Commit Summariser activated");
+  const output = vscode.window.createOutputChannel("Commit Summariser Logs");
+  output.show(true);
 
-  // -----------------------------------
-  // 1️⃣ Register your Summarize Commit command
-  // -----------------------------------
+  output.appendLine("✅ Commit Summariser activated");
+
+  // ---------------------------------------------------------------------------
+  // 1️⃣  Register the core "Summarize Commit" command
+  // ---------------------------------------------------------------------------
   const disposable = vscode.commands.registerCommand(
     "commit-summariser.summariseCommit",
     async (args?: { commitHash?: string }) => {
       const workspace = vscode.workspace.workspaceFolders?.[0];
       if (!workspace) {
-        vscode.window.showErrorMessage("No workspace open. Please open a Git project first.");
+        vscode.window.showErrorMessage("❌ No workspace open. Please open a Git project first.");
         return;
       }
 
@@ -150,17 +332,13 @@ export async function activate(context: vscode.ExtensionContext) {
       let commitHash = args?.commitHash;
 
       try {
-        // Confirm repo
         await execPromise("git rev-parse --is-inside-work-tree", { cwd });
 
-        // If no hash provided (manual trigger), show picker
+        // If triggered manually (no hash), show recent commits to pick from
         if (!commitHash) {
           const commits = await getRecentCommits(cwd);
           const pick = await vscode.window.showQuickPick(
-            commits.map((c) => ({
-              label: `${c.hash} — ${c.message}`,
-              hash: c.hash,
-            })),
+            commits.map((c) => ({ label: `${c.hash} — ${c.message}`, hash: c.hash })),
             { placeHolder: "Select a commit to summarise" }
           );
           if (!pick) return;
@@ -173,7 +351,10 @@ export async function activate(context: vscode.ExtensionContext) {
         );
 
         vscode.window.withProgress(
-          { location: vscode.ProgressLocation.Notification, title: `Summarising commit ${commitHash}…` },
+          {
+            location: vscode.ProgressLocation.Notification,
+            title: `Summarising commit ${commitHash}…`,
+          },
           async () => {
             const summary = await getAISummary(commitDetails);
             const doc = await vscode.workspace.openTextDocument({
@@ -184,54 +365,57 @@ export async function activate(context: vscode.ExtensionContext) {
           }
         );
       } catch (err: any) {
-        vscode.window.showErrorMessage(`Error summarising commit: ${err.message}`);
+        vscode.window.showErrorMessage(`❌ Error summarising commit: ${err.message}`);
+        output.appendLine(`❌ Error summarising commit: ${err.message}`);
       }
     }
   );
-
   context.subscriptions.push(disposable);
 
-  // -----------------------------------
-  // 2️⃣ 🔗 THIS IS THE GIT GRAPH INTEGRATION PART
-  // -----------------------------------
-  try {
+  // ---------------------------------------------------------------------------
+  // 2️⃣  Git Graph Integration  — waits until API exports are ready
+  // ---------------------------------------------------------------------------
+  async function registerWithGitGraph() {
     const gitGraphExt = vscode.extensions.getExtension("mhutchie.git-graph");
-    if (gitGraphExt) {
-      if (!gitGraphExt.isActive) {
-        console.log("🔄 Activating Git Graph extension...");
-        await gitGraphExt.activate();
-      }
 
-      const gitGraphApi = gitGraphExt.exports;
-      if (gitGraphApi?.registerGlobalExternalAction) {
-        gitGraphApi.registerGlobalExternalAction(
+    if (!gitGraphExt) {
+      vscode.window.showWarningMessage("⚠️ Git Graph not installed. Please install it from the Marketplace.");
+      output.appendLine("❌ Git Graph extension not found.");
+      return;
+    }
+
+    output.appendLine("🔍 Found Git Graph extension. Waiting for API…");
+
+    // Wait up to 15 s for the exports object to appear
+    for (let i = 0; i < 15; i++) {
+      if (gitGraphExt.exports?.registerGlobalExternalAction) {
+        output.appendLine("✅ Git Graph API available. Registering 'Summarize Commit'…");
+        gitGraphExt.exports.registerGlobalExternalAction(
           "Summarize Commit",
           async (data: { commitHash: string }) => {
-            console.log(`🧩 Summarising from Git Graph: ${data.commitHash}`);
+            output.appendLine(`🧩 Received commit from Git Graph: ${data.commitHash}`);
             vscode.commands.executeCommand("commit-summariser.summariseCommit", {
               commitHash: data.commitHash,
             });
           }
         );
-
-        vscode.window.showInformationMessage("✅ Commit Summariser registered with Git Graph");
-        console.log("✅ Commit Summariser registered with Git Graph");
-      } else {
-        vscode.window.showWarningMessage("⚠️ Git Graph API not found — update Git Graph to ≥ 1.30.0.");
-        console.log("⚠️ Git Graph API not found");
+        vscode.window.showInformationMessage("✅ Commit Summariser registered with Git Graph!");
+        output.appendLine("✅ Commit Summariser registered successfully.");
+        return;
       }
-    } else {
-      vscode.window.showWarningMessage("ℹ️ Git Graph not installed in this window.");
-      console.log("ℹ️ Git Graph not installed in this Dev Host");
+
+      await new Promise((res) => setTimeout(res, 1000)); // wait 1 s
     }
-  } catch (err: any) {
-    console.error("❌ Error integrating with Git Graph:", err.message);
+
+    output.appendLine("⚠️ Git Graph API never appeared after 15 s. Open Git Graph view manually and try again.");
   }
-  // -----------------------------------
-  // End of Git Graph integration part
-  // -----------------------------------
+
+  registerWithGitGraph();
 }
 
+// -----------------------------------------------------------------------------
+// Helper functions
+// -----------------------------------------------------------------------------
 async function getRecentCommits(cwd: string) {
   const { stdout } = await execPromise(`git log --pretty=format:"%h|%s" -n 20`, { cwd });
   return stdout
@@ -244,15 +428,21 @@ async function getRecentCommits(cwd: string) {
     });
 }
 
+const COPILOT_PATH = "/Users/rohitsingh/.nvm/versions/node/v20.19.5/bin/copilot";
+
 async function getAISummary(commitText: string): Promise<string> {
   try {
-    const { stdout } = await execPromise(`gh copilot explain "${commitText.replace(/"/g, '\\"')}"`);
+    const { stdout } = await execPromise(
+      `${COPILOT_PATH} -p "Explain in detail ${commitText.replace(/"/g, '\\"')}"`,
+    );
     return stdout || "No summary returned.";
   } catch (err: any) {
     return `⚠️ Error generating summary: ${err.message}`;
   }
 }
 
+// -----------------------------------------------------------------------------
 export function deactivate() {}
+
 
 
