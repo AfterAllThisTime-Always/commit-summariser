@@ -22,7 +22,17 @@
         "command": "commit-summariser.summariseCommit",
         "title": "Summarize Commit"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "Commit Summariser",
+      "properties": {
+        "commitSummariser.aiCommand": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Custom AI command for commit summarization. Leave empty to use `copilot -p` (default).\n\n**Default:** `copilot -p \"Explain this commit in detail: <commit-text>\"`\n\n**Custom Examples:**\n```json\n// Full path to copilot\n\"/usr/local/bin/copilot -p\"\n\n// Alternative AI tools\n\"ollama run llama2\"\n\"claude\"\n```\n\n*Note: The command will receive the prompt as a quoted argument*"
+        }
+      }
+    }
   },
 
   "scripts": {
