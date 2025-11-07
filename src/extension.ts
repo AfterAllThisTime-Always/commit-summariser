@@ -341,7 +341,9 @@ export async function activate(context: vscode.ExtensionContext) {
             commits.map((c) => ({ label: `${c.hash} — ${c.message}`, hash: c.hash })),
             { placeHolder: "Select a commit to summarise" }
           );
-          if (!pick) return;
+          if (!pick) {
+            return;
+          }
           commitHash = pick.hash;
         }
 
@@ -356,12 +358,24 @@ export async function activate(context: vscode.ExtensionContext) {
             title: `Summarising commit ${commitHash}…`,
           },
           async () => {
-            const summary = await getAISummary(commitDetails);
-            const doc = await vscode.workspace.openTextDocument({
-              content: summary,
-              language: "markdown",
-            });
-            vscode.window.showTextDocument(doc, { preview: false });
+            try {
+              const summary = await getAISummary(commitDetails);
+              
+              // Create a markdown document with the summary
+              const summaryContent = `# Commit Summary: ${commitHash}\n\n${summary}`;
+              
+              const doc = await vscode.workspace.openTextDocument({
+                content: summaryContent,
+                language: "markdown",
+              });
+              await vscode.window.showTextDocument(doc, { preview: false });
+              
+              output.appendLine(`✅ Successfully summarized commit ${commitHash}`);
+            } catch (err: any) {
+              const errorMsg = `Failed to summarize: ${err.message}`;
+              vscode.window.showErrorMessage(`❌ ${errorMsg}`);
+              output.appendLine(`❌ ${errorMsg}`);
+            }
           }
         );
       } catch (err: any) {
@@ -428,17 +442,90 @@ async function getRecentCommits(cwd: string) {
     });
 }
 
-const COPILOT_PATH = "/Users/rohitsingh/.nvm/versions/node/v20.19.5/bin/copilot";
-
 async function getAISummary(commitText: string): Promise<string> {
   try {
-    const { stdout } = await execPromise(
-      `${COPILOT_PATH} -p "Explain in detail ${commitText.replace(/"/g, '\\"')}"`,
-    );
-    return stdout || "No summary returned.";
+    // Get the AI command from settings
+    const config = vscode.workspace.getConfiguration('commitSummariser');
+    const customCommand = config.get<string>('aiCommand');
+    
+    // Escape commit text for shell command
+    const escapedText = commitText
+      .replace(/\\/g, '\\\\')
+      .replace(/"/g, '\\"')
+      .replace(/\$/g, '\\$')
+      .replace(/`/g, '\\`')
+      .replace(/!/g, '\\!');
+    
+    let command: string;
+    
+    if (customCommand) {
+      // Use custom command from settings
+      command = `${customCommand} "${escapedText}"`;
+    } else {
+      // Use the copilot -p format that works
+      command = `copilot -p "Explain this commit in detail: ${escapedText}"`;
+    }
+    
+    const { stdout, stderr } = await execPromise(command, {
+      maxBuffer: 10 * 1024 * 1024, // 10MB buffer for large commits
+      timeout: 120000, // 120 second timeout for large commits
+      shell: '/bin/bash'
+    });
+    
+    if (stderr && (stderr.includes('command not found') || stderr.includes('deprecated'))) {
+      return getInstallationInstructions();
+    }
+    
+    if (!stdout || stdout.trim().length === 0) {
+      return getInstallationInstructions();
+    }
+    
+    return stdout;
   } catch (err: any) {
-    return `⚠️ Error generating summary: ${err.message}`;
+    const errorMessage = err.message || String(err);
+    
+    if (errorMessage.includes('command not found') || 
+        errorMessage.includes('No such file') ||
+        errorMessage.includes('not found')) {
+      return getInstallationInstructions();
+    }
+    
+    return `⚠️ Error generating summary: ${errorMessage}\n\n${getInstallationInstructions()}`;
   }
+}
+
+function getInstallationInstructions(): string {
+  return `⚠️ GitHub Copilot CLI not found
+
+**📦 Installation:**
+
+The extension uses the \`copilot\` CLI command. Make sure it's installed and accessible in your PATH.
+
+**If you have GitHub Copilot CLI installed but it's not in PATH:**
+1. Find where copilot is installed: \`which copilot\` or \`where copilot\`
+2. Add it to your PATH, or configure the full path in settings
+
+**Custom Command Configuration:**
+1. Open Settings (Cmd/Ctrl + ,)
+2. Search for "commitSummariser.aiCommand"
+3. Set the full path or custom command
+
+**Examples:**
+\`\`\`json
+// Full path to copilot
+"commitSummariser.aiCommand": "/usr/local/bin/copilot -p"
+
+// Alternative AI tools
+"commitSummariser.aiCommand": "ollama run llama2"
+"commitSummariser.aiCommand": "claude"
+\`\`\`
+
+**💡 Tip:** The command will receive a prompt like: "Explain this commit in detail: <commit-content>"
+
+**Troubleshooting:**
+- Make sure \`copilot\` command works in your terminal
+- Check your PATH: \`echo $PATH\`
+- Try running: \`copilot -p "test"\` in terminal`;
 }
 
 // -----------------------------------------------------------------------------
